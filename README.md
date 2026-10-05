@@ -43,11 +43,11 @@ Every monitored device with its type, location, status and latest metrics. New d
 
 Click a device to see live charts of its last few minutes of history.
 
-![Core Router](docs/screenshots/device-core-router.png)
+![Core Router](docs/screenshots/corerouter.png)
 
 | Web Server (SRV1) | Database Server (SRV2) |
 |---|---|
-| ![Web Server](docs/screenshots/device-web-server.png) | ![Database Server](docs/screenshots/device-database-server.png) |
+| ![Web Server](docs/screenshots/webserver.png) | ![Database Server](docs/screenshots/databaseserver.png) |
 
 ---
 

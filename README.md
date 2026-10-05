@@ -1,6 +1,19 @@
-# Network Monitoring System
+# Network Monitor
 
-A small full-stack network monitoring project:
+A small full-stack network monitoring project. A C++ simulator pretends to be a rack of network devices, a Node/TypeScript backend polls and stores their metrics and raises alerts, and a React dashboard shows everything live.
+
+![Dashboard](docs/screenshots/dashboard.png)
+
+## Features
+
+- **Live dashboard** with fleet totals (devices, online, offline, open alerts, average CPU / memory / latency), a card per device, and a list of open alerts.
+- **Device management**: list, add and delete devices, with live status, CPU, memory, latency and last-seen time.
+- **Per-device detail pages** with six live metrics and four real-time charts (CPU & memory, bandwidth in/out, latency, temperature).
+- **Automatic alerting** for high CPU, memory, latency, temperature, packet loss, and offline devices. Alerts open and resolve on their own.
+- **Real-time updates** pushed to the browser over WebSocket (the "Live" indicator in the top bar).
+- **Failure simulation**: force a device down or up from the command line, and the simulator also spikes metrics and drops devices at random.
+
+## Architecture
 
 ```
 C++ device simulator  --TCP-->  Node/TypeScript backend  --REST + WebSocket-->  React dashboard
@@ -16,9 +29,25 @@ C++ device simulator  --TCP-->  Node/TypeScript backend  --REST + WebSocket-->  
 | `frontend/` | React 18, Vite, TypeScript, Recharts | 5173 |
 | `database/` | MySQL 8 (MariaDB 10.5+ also works) | 3306 |
 
-The backend polls the simulator every 3 seconds, saves each reading to MySQL, raises/resolves
-alerts (high CPU, memory, latency, temperature, packet loss, device offline) and pushes
-everything to the browser over WebSocket.
+The backend polls the simulator every 3 seconds, saves each reading to MySQL, raises and resolves alerts, and pushes everything to the browser over WebSocket.
+
+## Screenshots
+
+### Devices
+
+Every monitored device with its type, location, status and latest metrics. New devices are added from the form below the table.
+
+![Devices](docs/screenshots/devices.png)
+
+### Device detail
+
+Click a device to see live charts of its last few minutes of history.
+
+![Core Router](docs/screenshots/device-core-router.png)
+
+| Web Server (SRV1) | Database Server (SRV2) |
+|---|---|
+| ![Web Server](docs/screenshots/device-web-server.png) | ![Database Server](docs/screenshots/device-database-server.png) |
 
 ---
 
@@ -28,7 +57,9 @@ everything to the browser over WebSocket.
 - **Node.js 18+** and npm
 - **CMake 3.10+** and a C++17 compiler (g++, clang, or MSVC)
 
-## How to run (4 terminals, in this order)
+## Getting started
+
+Run these in order, using a separate terminal for each long-running process.
 
 ### 1. Database (once)
 
@@ -39,7 +70,7 @@ mysql -u root -p < database/schema.sql
 mysql -u root -p network_monitor < database/seed.sql
 ```
 
-(Both scripts are safe to re-run; they never drop data.)
+Both scripts are safe to re-run; they never drop data.
 
 Then open `backend/.env` and set `DB_USER` / `DB_PASSWORD` to match your MySQL login.
 
@@ -52,8 +83,7 @@ cmake --build build
 ./build/device-simulator
 ```
 
-On Windows (Visual Studio generator) the binary is `build\Debug\device-simulator.exe`;
-with MinGW it is `build\device-simulator.exe`.
+On Windows with the Visual Studio generator the binary is `build\Debug\device-simulator.exe`; with MinGW it is `build\device-simulator.exe`.
 
 Options: `--port 9000` (default) and `--host 127.0.0.1` (default).
 
@@ -81,7 +111,7 @@ Open **http://localhost:5173**.
 
 ## Trying it out
 
-Simulate a device failure and watch the dashboard react (alert appears, then resolves on recovery):
+Simulate a device failure and watch the dashboard react: an alert appears, then resolves when the device recovers.
 
 ```bash
 # Linux/macOS (needs netcat)
@@ -96,10 +126,15 @@ $w = New-Object IO.StreamWriter($c.GetStream()); $w.AutoFlush = $true
 $w.WriteLine("DOWN FW1")    # later: $w.WriteLine("UP FW1")
 ```
 
-The simulator also randomly spikes CPU/latency/etc. and takes devices offline briefly,
-so alerts appear on their own.
+The simulator also randomly spikes CPU, latency and other metrics and briefly takes devices offline, so alerts appear on their own.
 
-### Simulator protocol (one line in, one line out)
+> **Note:** a device's `sim_id` must match one the simulator knows. If you add a device with any other ID (for example the extra "Edge Router" at `10.0.5.1` in the dashboard screenshot), it is shown as **Offline** with no metrics and raises a "not responding" alert.
+
+## Simulator
+
+Device IDs: `R1 R2 SW1 SW2 FW1 SRV1 SRV2 AP1` (must match `sim_id` in `database/seed.sql`).
+
+### Protocol (one line in, one line out)
 
 | Command | Reply |
 |---------|-------|
@@ -108,8 +143,6 @@ so alerts appear on their own.
 | `ALL` | `{"devices":[{...},{...}]}` |
 | `GET <id>` | `{"id":"R1","status":"online","metrics":{...},"timestamp":...}` |
 | `DOWN <id>` / `UP <id>` | `{"ok":true}` (force offline / online) |
-
-Device IDs: `R1 R2 SW1 SW2 FW1 SRV1 SRV2 AP1` (must match `sim_id` in `database/seed.sql`).
 
 ## REST API
 
@@ -124,7 +157,9 @@ Device IDs: `R1 R2 SW1 SW2 FW1 SRV1 SRV2 AP1` (must match `sim_id` in `database/
 | GET | `/api/devices/:id/metrics?limit=60` | Recent history, oldest first (max 500) |
 | GET | `/api/alerts?status=open\|resolved\|all&device_id=&limit=` | Alerts |
 
-WebSocket events: `metric:update`, `device:status`, `alert:new`, `alert:resolved`.
+### WebSocket events
+
+`metric:update`, `device:status`, `alert:new`, `alert:resolved`
 
 ## Configuration (`backend/.env`)
 
@@ -137,8 +172,19 @@ WebSocket events: `metric:update`, `device:status`, `alert:new`, `alert:resolved
 | `POLL_INTERVAL_MS` | 3000 | Polling period |
 | `METRIC_RETENTION_HOURS` | 24 | Older metric rows are deleted hourly |
 
-Alert thresholds (warning / critical) live in `backend/src/services/monitoringService.ts`:
-CPU 80/92 %, memory 85/95 %, latency 100/200 ms, temperature 70/80 °C, packet loss 2/5 %.
+## Alert thresholds
+
+Defined in `backend/src/services/monitoringService.ts`:
+
+| Metric | Warning | Critical |
+|--------|---------|----------|
+| CPU | 80 % | 92 % |
+| Memory | 85 % | 95 % |
+| Latency | 100 ms | 200 ms |
+| Temperature | 70 °C | 80 °C |
+| Packet loss | 2 % | 5 % |
+
+A device that stops responding raises a critical "not responding" alert.
 
 ## Production build
 
